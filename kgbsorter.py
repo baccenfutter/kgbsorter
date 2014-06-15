@@ -35,15 +35,13 @@ from fs_hopper import File, Directory
 DEFAULT_CONF = '/etc/samba/smb.conf'
 DEFAULT_DAYS = 14
 
-args = docopt(__doc__, version=__version__)
-print args
 
 class Share(Directory):
     @classmethod
     def get_shares(cls, use_smb_conf=''):
         config_file = use_smb_conf or DEFAULT_CONF
         haystack = open(config_file).readlines()
-        needle = re.compile(r'.*path.*=.*"(.*)".*')
+        needle = re.compile(r'[^#]*path.*=.*"(.*)".*')
         fork = re.compile(r'.*#.*protected.*')
         for line in haystack:
             match = needle.match(line)
@@ -60,12 +58,56 @@ class Share(Directory):
                     path[len(share) + 1:],
                 )
 
-    def lock(self, target):
-        """lock a file within this share as 'sorted'"""
+    def get_hardlink_basedir(self):
+        dir_name, base_name = os.path.split(self.name)
+        return Directory(os.path.join(dir_name, '.' + base_name))
 
-    def unlock(self, target):
+    def lock_file(self, rel_path):
+        """Lock a file within this share as 'sorted'
+
+        :param: rel_path    - relative path from root of share
+        """
+        abs_path_target = os.path.join(self.name, rel_path)
+        abs_path_hardlink = os.path.join(self.get_hardlink_basedir().name, rel_path)
+        if not os.path.exists(abs_path_target):
+            raise IOError("File or directory not found: %s" % abs_path_target)
+        if os.path.exists(abs_path_hardlink):
+            print "Target already Locked: %s" % abs_path_target
+            return
+        directory = os.path.split(abs_path_hardlink)[0]
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        print "Locking: %s" % abs_path_target
+        os.link(abs_path_target, abs_path_hardlink)
+
+    @classmethod
+    def locker(cls, targets=[]):
+        """Lock a file or directory within this share as 'sorted'
+
+        :param:     targets - list of target files
+        """
+        for target in targets:
+            share, sub = cls.get_share_of(target) or (None, None)
+            if share:
+                abs_path = os.path.join(share.name, sub)
+                if os.path.isfile(abs_path):
+                    share.lock_file(sub)
+                elif os.path.isdir(abs_path):
+                    cls.locker([d.name for d in Directory(abs_path).get_childs()])
+                else:
+                    raise NotImplementedError("Regular files only!")
+            else:
+                raise IOError("Not within a samba share: %s" % target)
+
+    def unlocker(self, target):
         """unlock a file within this share from being 'sorted'"""
+        pass
 
     def cleanup(self, days=DEFAULT_DAYS):
         """cleanup this share now"""
         pass
+
+if __name__ == '__main__':
+    args = docopt(__doc__, version=__version__)
+    print args
+
