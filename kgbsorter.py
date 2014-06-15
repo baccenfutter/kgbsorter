@@ -72,13 +72,28 @@ class Share(Directory):
         if not os.path.exists(abs_path_target):
             raise IOError("File or directory not found: %s" % abs_path_target)
         if os.path.exists(abs_path_hardlink):
-            print "Target already Locked: %s" % abs_path_target
+            print "Target already locked: %s" % abs_path_target
             return
         directory = os.path.split(abs_path_hardlink)[0]
         if not os.path.exists(directory):
             os.makedirs(directory)
         print "Locking: %s" % abs_path_target
         os.link(abs_path_target, abs_path_hardlink)
+
+    def unlock_file(self, rel_path):
+        """Unlock a file within this share from being 'sorted'
+
+        :param: rel_path    - relative path from root of share
+        """
+        abs_path_target = os.path.join(self.name, rel_path)
+        abs_path_hardlink = os.path.join(self.get_hardlink_basedir().name, rel_path)
+        if not os.path.exists(abs_path_target):
+            raise IOError("File or directory not found: %s" % abs_path_target)
+        if not os.path.exists(abs_path_hardlink):
+            print "Target not locked: %s" % abs_path_target
+            return
+        print "Unlocking: %s" % abs_path_target
+        os.remove(abs_path_hardlink)
 
     @classmethod
     def locker(cls, targets=[]):
@@ -90,6 +105,9 @@ class Share(Directory):
             share, sub = cls.get_share_of(target) or (None, None)
             if share:
                 abs_path = os.path.join(share.name, sub)
+                if not os.path.exists(abs_path):
+                    raise IOError("File or directory not found: %s" % abs_path)
+
                 if os.path.isfile(abs_path):
                     share.lock_file(sub)
                 elif os.path.isdir(abs_path):
@@ -99,9 +117,27 @@ class Share(Directory):
             else:
                 raise IOError("Not within a samba share: %s" % target)
 
-    def unlocker(self, target):
-        """unlock a file within this share from being 'sorted'"""
-        pass
+    @classmethod
+    def unlocker(cls, targets=[]):
+        """Unlock a file within this share from being 'sorted'
+
+        :param:     targets     - list of target files
+        """
+        for target in targets:
+            share, sub = cls.get_share_of(target) or (None, None)
+            if share:
+                abs_path = os.path.join(share.name, sub)
+                if not os.path.exists(abs_path):
+                    raise IOError("File or directory not found: %s" % abs_path)
+
+                if os.path.isfile(abs_path):
+                    share.unlock_file(sub)
+                elif os.path.isdir(abs_path):
+                    cls.unlocker([d.name for d in Directory(abs_path).get_childs()])
+                else:
+                    raise NotImplementedError("Regular files only!")
+            else:
+                raise IOError("Not within a samba share: %s" % target)
 
     def cleanup(self, days=DEFAULT_DAYS):
         """cleanup this share now"""
