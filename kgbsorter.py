@@ -1,5 +1,7 @@
 """kgbsorter
 
+A tool for managing hardlinks on kgb.
+
 All shares are obtained from /etc/samba/smb.conf. Shares within the
 samba configuration file that end with the string 'protected' are
 considered to be protected from use.
