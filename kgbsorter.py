@@ -16,7 +16,7 @@ name exists within the hardlink basedir, it is considered as
 'unlocked' and will be deleted after N days, whereby N may be
 configured to an arbitrary number of days greater than zero.
 
-Usage: kgbsorter.py [lock | unlock | cleanup [-d <DAYS>]] FILE...
+Usage: kgbsorter.py [lock | unlock | cleanup [-d DAYS]] FILE...
 
 Options:
     -h --help       show this
@@ -29,11 +29,14 @@ __date__ = '2014-06-15'
 
 import os
 import re
+from docopt import docopt
 from fs_hopper import File, Directory
 
 DEFAULT_CONF = '/etc/samba/smb.conf'
 DEFAULT_DAYS = 14
 
+args = docopt(__doc__, version=__version__)
+print args
 
 class Share(Directory):
     @classmethod
