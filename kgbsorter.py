@@ -19,6 +19,7 @@ name exists within the hardlink basedir, it is considered as
 configured to an arbitrary number of days greater than zero.
 
 Usage:
+    kgbsorter.py
     kgbsorter.py lock FILE...
     kgbsorter.py unlock FILE...
     kgbsorter.py cleanup FILE... [-d DAYS | -m MINUTES]
@@ -211,4 +212,8 @@ if __name__ == '__main__':
     elif args['cleanup']:
         days = args['DAYS'] or DEFAULT_DAYS
         minutes = args['MINUTES'] or DEFAULT_MINS
+    else:
+        print("List of available shares:")
+        for share in Share.get_shares():
+            print(share)
 
