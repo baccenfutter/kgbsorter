@@ -112,11 +112,11 @@ class Share(Directory):
 
     @property
     def subs(self):
-        return self.share_basedir.get_subs()
+        return [Share(sub.name) for sub in self.get_subs()]
 
     @property
     def childs(self):
-        return self.share_basedir.get_childs()
+        return [Share(child.name) for child in self.get_childs()]
 
     def __link(self, src, dst):
         """Create hardlink of src at dst
@@ -132,6 +132,7 @@ class Share(Directory):
         :return: list   - list of files actually locked
         :raise: IOError - if file doesn't exist within a share
         """
+
         locked_files = []
 
         if not self.exists():
@@ -193,7 +194,7 @@ class Share(Directory):
 
         if self.is_dir():
             for child in self.childs:
-                unlocked_files.append(child.unlock())
+                unlocked_files += child.unlock()
 
         elif self.is_file():
             store_basedir = self.store_basedir
@@ -223,7 +224,7 @@ class Share(Directory):
                     os.remove(dst.name)
                     unlocked_files.append(self)
 
-            return unlocked_files
+        return unlocked_files
 
 if __name__ == '__main__':
     args = docopt(__doc__, version=__version__)
