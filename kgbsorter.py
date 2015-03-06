@@ -1,3 +1,4 @@
+#!/usr/bin/env  python2.7
 """kgbsorter
 
 A tool for managing hardlinks on kgb.
@@ -24,13 +25,13 @@ ensure that all these file-names exist as a hardlink relative to the
 share's base-directory. Second, it will recursively iterate over all
 files underneath the share base-directory and delete all files that
 are not locked and older than N days, whereby N may be configured via
-the shell parameters -d DAYS and -m MINUTES or default to 14 days.
+the shell parameters -d DAYS and -m MINUTES or default to 7 days.
 
 Usage:
     kgbsorter
     kgbsorter lock FILE...
     kgbsorter unlock FILE...
-    kgbsorter cleanup FILE... [-d DAYS | -m MINUTES]
+    kgbsorter cleanup SHARE [-d DAYS | -m MINUTES]
 
 Options:
     -h --help               show this
@@ -46,13 +47,18 @@ from datetime import datetime, timedelta
 from fs_hopper import Directory
 
 DEFAULT_CONF = '/etc/samba/smb.conf'
-DEFAULT_DAYS = 14
+DEFAULT_DAYS = 7
 DEFAULT_MINS = 0
 
 
 class Share(Directory):
     @classmethod
     def get_shares(cls, use_smb_conf=''):
+        """Generate for all available shares according to /etc/samba/smb.conf
+
+        :param use_smb_conf:    str         - optional custom path to smb.conf
+        :return: generator                  - a list of strings
+        """
         config_file = use_smb_conf or DEFAULT_CONF
         haystack = open(config_file).readlines()
         needle = re.compile(r'[^#]*path.*=.*"(.*)".*')
@@ -63,163 +69,128 @@ class Share(Directory):
                 if not fork.match(match.group(0)):
                     yield match.group(1)
 
-    @classmethod
-    def get_share_of(cls, path):
-        for share in cls.get_shares():
-            if path.startswith(share):
-                return (
-                    Share(share),
-                    path[len(share) + 1:],
-                )
+    @property
+    def share_basedir(self):
+        """Obtain base-directory of self
 
-    def get_hardlink_basedir(self):
-        dir_name, base_name = os.path.split(self.name)
-        return Directory(os.path.join(dir_name, '.' + base_name))
-
-    def lock_file(self, rel_path):
-        """Lock a file within this share as 'sorted'
-
-        :param: rel_path    - relative path from root of share
+        :return: object     - instance of Share(basedir)
+        :raise: IOError    - if self doesn't lay within a share
         """
-        abs_path_target = os.path.join(self.name, rel_path)
-        abs_path_hardlink = os.path.join(self.get_hardlink_basedir().name, rel_path)
-        if not os.path.exists(abs_path_target):
-            raise IOError("File or directory not found: %s" % abs_path_target)
-        if os.path.exists(abs_path_hardlink):
-            print("Target already locked: %s" % abs_path_target)
-            return
-        directory = os.path.split(abs_path_hardlink)[0]
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        print("Locking: %s" % abs_path_target)
-        os.link(abs_path_target, abs_path_hardlink)
+        shares = filter(lambda x: self.name.startswith(x), Share.get_shares())
+        if not shares:
+            raise IOError("Doesn't lay within a share: {}".format(self))
 
-    def unlock_file(self, rel_path):
-        """Unlock a file within this share from being 'sorted'
+        share = shares[0]
+        return Share(share)
 
-        :param: rel_path    - relative path from root of share
+    @property
+    def store_basedir(self):
+        """Obtain base-directory of this share's store
+
+        :return: object     - instance of Share(store_basedir)
+        :raise: IOError     - if self doesn't lay within a share
         """
-        abs_path_target = os.path.join(self.name, rel_path)
-        abs_path_hardlink = os.path.join(self.get_hardlink_basedir().name, rel_path)
-        if not os.path.exists(abs_path_target):
-            raise IOError("File or directory not found: %s" % abs_path_target)
-        if not os.path.exists(abs_path_hardlink):
-            print("Target not locked: %s" % abs_path_target)
-            return
-        print("Unlocking: %s" % abs_path_target)
-        os.remove(abs_path_hardlink)
 
-    def recover_file(self, rel_path):
-        abs_path_target = os.path.join(self.name, rel_path)
-        abs_path_hardlink = os.path.join(self.get_hardlink_basedir().name, rel_path)
-        # if the path exists, we need to check if it is really a hardlink to
-        # this file and otherwise be rude
-        if os.path.exists(abs_path_target):
-            if os.stat(abs_path_target).st_ino == os.stat(abs_path_hardlink).st_ino:
-                return
-            else:
-                print("Deleting rogue target: %s" % abs_path_target),
-                if os.path.isfile(abs_path_target):
-                    os.remove(abs_path_target)
-                elif os.path.isdir(abs_path_target):
-                    import shutil
-                    shutil.rmtree(abs_path_target)
+        try:
+            basedir = self.share_basedir
+        except IOError, e:
+            raise IOError(e)
 
-        print("Recovering file: %s" % abs_path_target)
-        os.link(abs_path_hardlink, abs_path_target)
+        dirname = os.path.sep.join(basedir.name.split(os.path.sep)[:-1])
+        basename = basedir.name.split(os.path.sep)[-1]
+        store_path = os.path.join(dirname, '.' + basename)
+        store = Share(store_path)
+        return store
 
-    def cleanup_share(self, days=DEFAULT_DAYS, minutes=DEFAULT_MINS):
-        """cleanup this share from all unsorted files
+    @property
+    def rel_path(self):
+        """Obtain relative path inside share
 
-        :param: int     - max age of an unsorted file in days
-        :param: int     - max age of an unsorted file in minutes
+        :return: str
         """
-        # ensure all locked files are in place
-        for root, directory, files in os.walk(self.get_hardlink_basedir().name):
-            for file in files:
-                # join root and file, then cut of of the hardlink basedir for
-                # the recover_file() function
-                rel_path = os.path.join(root, file)[len(self.name) + 2:]
-                self.recover_file(rel_path)
+        return self.name[len(self.share_basedir.name) + 1:]
 
-            # remove all empty directories
-            if not files:
-                tomb_path = os.path.join(root, directory)
-                print("Removing empty: %s" % tomb_path)
-                os.rmdir(tomb_path)
+    @property
+    def subs(self):
+        return self.share_basedir.get_subs()
 
+    @property
+    def childs(self):
+        return self.share_basedir.get_childs()
 
-        # remove all unlocked files from share, older than sum of days + minutes
-        for root, directory, files in os.walk(self.name):
-            for file in files:
-                rel_path = os.path.join(root, file)
-                c_time = os.path.getctime(rel_path)
-                if datetime.fromtimestamp(c_time) < datetime.now() - timedelta(days=days, minutes=minutes):
-                    if os.stat(rel_path).st_nlink > 1:
-                        print("Removing: %s" % rel_path)
-                        os.remove(rel_path)
+    def __link(self, src, dst):
+        """Create hardlink of src at dst
 
-            # remove all emtpy directories
-            if not files:
-                tomb_path = os.path.join(root, directory)
-                print("Removing empty: %s" % tomb_path)
-                os.rmdir(tomb_path)
-
-    @classmethod
-    def locker(cls, targets=[]):
-        """Lock a file or directory within this share as 'sorted'
-
-        :param:     targets - list of target files
+        :param src:
+        :param dst:
+        :return:
         """
-        for target in targets:
-            share, sub = cls.get_share_of(target) or (None, None)
-            if share:
-                abs_path = os.path.join(share.name, sub)
-                if not os.path.exists(abs_path):
-                    raise IOError("File or directory not found: %s" % abs_path)
 
-                if os.path.isfile(abs_path):
-                    share.lock_file(sub)
-                elif os.path.isdir(abs_path):
-                    cls.locker([d.name for d in Directory(abs_path).get_childs()])
+    def lock(self):
+        """Lock this file or all files in this directory
+
+        :return: list   - list of files actually locked
+        :raise: IOError - if file doesn't exist within a share
+        """
+        locked_files = []
+
+        basedir = self.share_basedir
+        if not basedir:
+            raise IOError("Not within share: {}".format(self))
+        if not self.exists():
+            raise IOError("File or directory not found: {}".format(self))
+
+        if self.is_dir():
+            for child in self.childs:
+                locked_files += child.lock()
+
+        elif self.is_file():
+            store_basedir = self.store_basedir
+            rel_path = self.rel_path
+            dirs = rel_path.split(os.path.sep)[:-1]
+            basename = rel_path.split(os.path.sep)[-1]
+
+            # recursively create the sub-directory structure
+            dir_cursor = store_basedir
+            for d in dirs:
+                subdir = Share(os.path.join(dir_cursor.name, d))
+                if subdir.exists():
+                    if subdir.is_dir():
+                        dir_cursor = subdir
+                        continue
+                    else:
+                        if subdir.is_file():
+                            subdir.delete()
+                        else:
+                            raise NotImplementedError
                 else:
-                    raise NotImplementedError("Regular files only!")
-            else:
-                raise IOError("Not within a samba share: %s" % target)
+                    subdir.mkdir()
+                    dir_cursor = subdir
+            dst = Share(os.path.join(dir_cursor.name, basename))
 
-    @classmethod
-    def unlocker(cls, targets=[]):
-        """Unlock a file within this share from being 'sorted'
+            # create the actual hardlink
+            if not dst.exists():
+                os.link(self.name, dst.name)
+                locked_files.append(self)
 
-        :param:     targets     - list of target files
-        """
-        for target in targets:
-            share, sub = cls.get_share_of(target) or (None, None)
-            if share:
-                abs_path = os.path.join(share.name, sub)
-                if not os.path.exists(abs_path):
-                    raise IOError("File or directory not found: %s" % abs_path)
+        else:
+            raise NotImplementedError("Not a regular file: {}".format(self))
 
-                if os.path.isfile(abs_path):
-                    share.unlock_file(sub)
-                elif os.path.isdir(abs_path):
-                    cls.unlocker([d.name for d in Directory(abs_path).get_childs()])
-                else:
-                    raise NotImplementedError("Regular files only!")
-            else:
-                raise IOError("Not within a samba share: %s" % target)
+        return locked_files
 
 
 if __name__ == '__main__':
     args = docopt(__doc__, version=__version__)
     abs_paths = [os.path.abspath(os.path.realpath(f)) for f in args['FILE']]
     if args['lock']:
-        Share.locker(abs_paths)
+        pass
     elif args['unlock']:
-        Share.unlocker(abs_paths)
+        pass
     elif args['cleanup']:
+        share = args['SHARE']
         days = args['DAYS'] or DEFAULT_DAYS
         minutes = args['MINUTES'] or DEFAULT_MINS
+        pass
     else:
         print("List of available shares:")
         for share in Share.get_shares():
