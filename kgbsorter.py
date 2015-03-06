@@ -127,18 +127,19 @@ class Share(Directory):
         """
 
     def lock(self):
-        """Lock this file or all files in this directory
+        """Lock this file or all files beneath this directory
 
         :return: list   - list of files actually locked
         :raise: IOError - if file doesn't exist within a share
         """
         locked_files = []
 
+        if not self.exists():
+            raise IOError("File or directory not found: {}".format(self))
+
         basedir = self.share_basedir
         if not basedir:
             raise IOError("Not within share: {}".format(self))
-        if not self.exists():
-            raise IOError("File or directory not found: {}".format(self))
 
         if self.is_dir():
             for child in self.childs:
@@ -157,12 +158,10 @@ class Share(Directory):
                 if subdir.exists():
                     if subdir.is_dir():
                         dir_cursor = subdir
-                        continue
+                    elif subdir.is_file():
+                        subdir.delete()
                     else:
-                        if subdir.is_file():
-                            subdir.delete()
-                        else:
-                            raise NotImplementedError
+                        raise NotImplementedError
                 else:
                     subdir.mkdir()
                     dir_cursor = subdir
@@ -178,6 +177,53 @@ class Share(Directory):
 
         return locked_files
 
+    def unlock(self):
+        """Unlock this file or all files beneath this directory
+
+        :return: list       - list of actually unlocked directories
+        """
+        unlocked_files = []
+
+        if not self.exists():
+            raise IOError("File or directory not found: {}".format(self))
+
+        basedir = self.share_basedir
+        if not basedir:
+            raise IOError("Doesn't lay within a share: {}".format(self))
+
+        if self.is_dir():
+            for child in self.childs:
+                unlocked_files.append(child.unlock())
+
+        elif self.is_file():
+            store_basedir = self.store_basedir
+            rel_path = self.rel_path
+            dirs = rel_path.split(os.path.sep)[:-1]
+            basename = rel_path.split(os.path.sep)[-1]
+
+            # recursively follow directory structure to target file
+            dir_cursor = store_basedir
+            for d in dirs:
+                subdir = Share(os.path.join(store_basedir.name, d))
+                if subdir.exists():
+                    if subdir.is_dir():
+                        dir_cursor = subdir
+                    elif subdir.is_file():
+                        return unlocked_files
+                    else:
+                        raise NotImplementedError
+                else:
+                    return unlocked_files
+            dst = Share(os.path.join(dir_cursor.name, basename))
+
+            # check if link exists and if it is really a hardlink to the
+            # file in the share
+            if dst.exists() and dst.is_file():
+                if os.stat(dst.name).st_ino == os.stat(self.name).st_ino:
+                    os.remove(dst.name)
+                    unlocked_files.append(self)
+
+            return unlocked_files
 
 if __name__ == '__main__':
     args = docopt(__doc__, version=__version__)
