@@ -40,18 +40,17 @@ __author = ['Brian Wiborg <baccenfutter@c-base.org>']
 __version__ = '0.1.0-alpha'
 __date__ = '2014-06-15'
 
+from fs_hopper import Directory
+from docopt import docopt
 import os
 import re
-from docopt import docopt
-from datetime import datetime, timedelta
-from fs_hopper import Directory
 
 DEFAULT_CONF = '/etc/samba/smb.conf'
 DEFAULT_DAYS = 7
 DEFAULT_MINS = 0
 
 
-class Share(Directory):
+class SmbNode(Directory):
     @classmethod
     def get_shares(cls, use_smb_conf=''):
         """Generate for all available shares according to /etc/samba/smb.conf
@@ -63,31 +62,33 @@ class Share(Directory):
         haystack = open(config_file).readlines()
         needle = re.compile(r'[^#]*path.*=.*"(.*)".*')
         fork = re.compile(r'.*#.*protected.*')
+        output = []
         for line in haystack:
             match = needle.match(line)
             if match:
                 if not fork.match(match.group(0)):
-                    yield match.group(1)
+                    output.append(match.group(1))
+        return output
 
     @property
     def share_basedir(self):
         """Obtain base-directory of self
 
-        :return: object     - instance of Share(basedir)
+        :return: object     - instance of SmbNode(basedir)
         :raise: IOError    - if self doesn't lay within a share
         """
-        shares = filter(lambda x: self.name.startswith(x), Share.get_shares())
+        shares = filter(lambda x: self.name.startswith(x), SmbNode.get_shares())
         if not shares:
             raise IOError("Doesn't lay within a share: {}".format(self))
 
         share = shares[0]
-        return Share(share)
+        return SmbNode(share)
 
     @property
     def store_basedir(self):
         """Obtain base-directory of this share's store
 
-        :return: object     - instance of Share(store_basedir)
+        :return: object     - instance of SmbNode(store_basedir)
         :raise: IOError     - if self doesn't lay within a share
         """
 
@@ -99,7 +100,7 @@ class Share(Directory):
         dirname = os.path.sep.join(basedir.name.split(os.path.sep)[:-1])
         basename = basedir.name.split(os.path.sep)[-1]
         store_path = os.path.join(dirname, '.' + basename)
-        store = Share(store_path)
+        store = SmbNode(store_path)
         return store
 
     @property
@@ -112,11 +113,11 @@ class Share(Directory):
 
     @property
     def subs(self):
-        return [Share(sub.name) for sub in self.get_subs()]
+        return [SmbNode(sub.name) for sub in self.get_subs()]
 
     @property
     def childs(self):
-        return [Share(child.name) for child in self.get_childs()]
+        return [SmbNode(child.name) for child in self.get_childs()]
 
     def __link(self, src, dst):
         """Create hardlink of src at dst
@@ -155,7 +156,7 @@ class Share(Directory):
             # recursively create the sub-directory structure
             dir_cursor = store_basedir
             for d in dirs:
-                subdir = Share(os.path.join(dir_cursor.name, d))
+                subdir = SmbNode(os.path.join(dir_cursor.name, d))
                 if subdir.exists():
                     if subdir.is_dir():
                         dir_cursor = subdir
@@ -166,7 +167,7 @@ class Share(Directory):
                 else:
                     subdir.mkdir()
                     dir_cursor = subdir
-            dst = Share(os.path.join(dir_cursor.name, basename))
+            dst = SmbNode(os.path.join(dir_cursor.name, basename))
 
             # create the actual hardlink
             if not dst.exists():
@@ -205,7 +206,7 @@ class Share(Directory):
             # recursively follow directory structure to target file
             dir_cursor = store_basedir
             for d in dirs:
-                subdir = Share(os.path.join(store_basedir.name, d))
+                subdir = SmbNode(os.path.join(store_basedir.name, d))
                 if subdir.exists():
                     if subdir.is_dir():
                         dir_cursor = subdir
@@ -215,7 +216,7 @@ class Share(Directory):
                         raise NotImplementedError
                 else:
                     return unlocked_files
-            dst = Share(os.path.join(dir_cursor.name, basename))
+            dst = SmbNode(os.path.join(dir_cursor.name, basename))
 
             # check if link exists and if it is really a hardlink to the
             # file in the share
@@ -226,20 +227,53 @@ class Share(Directory):
 
         return unlocked_files
 
+
+class KgbSorter(object):
+    def __init__(self, args):
+        self.args = args
+
+    @property
+    def abs_paths(self):
+        return [os.path.abspath(os.path.realpath(f)) for f in args['FILE']]
+
+    def list_shares(self):
+        return SmbNode.get_shares()
+
+    def lock(self, *paths):
+        locked_nodes = []
+        for path in paths:
+            share = SmbNode(path)
+            locked_nodes += share.lock()
+        return locked_nodes
+
+    def unlock(self, *paths):
+        unlocked_nodes = []
+        for path in paths:
+            share = SmbNode(path)
+            unlocked_nodes += share.unlock()
+        return unlocked_nodes
+
+    def cleanup(self):
+        pass
+
+
 if __name__ == '__main__':
     args = docopt(__doc__, version=__version__)
-    abs_paths = [os.path.abspath(os.path.realpath(f)) for f in args['FILE']]
+    kgb_sorter = KgbSorter(args)
     if args['lock']:
-        pass
+        files = kgb_sorter.lock(*kgb_sorter.abs_paths)
+        if files:
+            for f in files:
+                print f
     elif args['unlock']:
-        pass
-    elif args['cleanup']:
-        share = args['SHARE']
-        days = args['DAYS'] or DEFAULT_DAYS
-        minutes = args['MINUTES'] or DEFAULT_MINS
-        pass
-    else:
-        print("List of available shares:")
-        for share in Share.get_shares():
-            print(share)
+        files = kgb_sorter.unlock(*kgb_sorter.abs_paths)
+        if files:
+            for f in files:
+                print f
 
+    elif args['cleanup']:
+        kgb_sorter.cleanup()
+    else:
+        print "Available shares:"
+        for share in kgb_sorter.list_shares():
+            print share
