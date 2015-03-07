@@ -119,6 +119,13 @@ class SmbNode(Directory):
     def childs(self):
         return [SmbNode(child.name) for child in self.get_childs()]
 
+    @property
+    def lock_file(self):
+        share_basedir = self.share_basedir
+        store_basedir = self.store_basedir
+        rel_path = self.name[len(share_basedir.name) + 1:]
+        return SmbNode(os.path.join(store_basedir.name, rel_path))
+
     def __link(self, src, dst):
         """Create hardlink of src at dst
 
