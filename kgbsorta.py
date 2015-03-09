@@ -28,7 +28,7 @@ Usage:
     kgbsorter
     kgbsorter lock FILE...
     kgbsorter unlock FILE...
-    kgbsorter cleanup SHARE [-d DAYS | -m MINUTES]
+    kgbsorter cleanup SHARE [-d DAYS]
 
 Options:
     -h --help               show this
