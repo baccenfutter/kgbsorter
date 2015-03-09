@@ -150,7 +150,7 @@ class KgbSorta(object):
                 node = self.get_path(this_path.abspath)
                 node.share.store.ensure_unlink(node.rel_path, node)
 
-    def cleanup(self, share_path):
+    def cleanup(self, share_path, days=DEFAULT_DAYS):
         """Cleanup a given share
 
         :param share_path: str  - absolute path of share
@@ -169,7 +169,7 @@ class KgbSorta(object):
         for node in share.subs:
             if node.share.store.check_link(node.rel_path, node):
                 continue
-            if node.older_than(DEFAULT_DAYS):
+            if node.older_than(days):
                 node.remove()
 
 
