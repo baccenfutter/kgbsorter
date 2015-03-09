@@ -47,6 +47,11 @@ DEFAULT_DAYS = 7
 
 
 class KgbSorta(object):
+    """API Main Class
+
+    Use this class for embedding this software in your other software.
+    """
+
     def __init__(self):
         self.config = SafeConfigParser()
         self.config.read([
@@ -57,9 +62,15 @@ class KgbSorta(object):
 
     @property
     def shares(self):
+        """Obtain list of all existing shares defined in the configuration"""
         return [self.config.get(sec, 'path') for sec in self.config.sections()]
 
     def get_share(self, path):
+        """Transform path string into instance of Share
+
+        :param path: str    - absolute path of share
+        :return: obj        - instance of Share
+        """
         if not os.path.exists(path):
             raise IOError("File or directory not found: {}".format(path))
 
@@ -71,6 +82,11 @@ class KgbSorta(object):
                 return Share(share_path)
 
     def get_path(self, path):
+        """Transform path string into instance of ChildNode
+
+        :param path: str    - absolute path of a location in the filesystem
+        :return: obj        - instance if ChildNode
+        """
         share = self.get_share(path)
 
         if not share:
@@ -80,10 +96,19 @@ class KgbSorta(object):
         return child
 
     def get(self, path):
+        """Wrapper for get_share() and get_path()
+
+        :param path: str    - absolute path of a location in the filesystem
+        :return: tuple      - (<instance of Share>, <instance of ChildNode>)
+        """
         path = self.get_path(path)
         return path.share, path
 
     def lock(self, *files):
+        """Lock any given set of files
+
+        :param files: tuple     - collection of files in the filesystem to lock
+        """
         for given_file in files:
             abspath = os.path.abspath(os.path.realpath(given_file))
 
@@ -103,6 +128,10 @@ class KgbSorta(object):
                 node.share.store.ensure_link(node.rel_path, node)
 
     def unlock(self, *files):
+        """Unlock any given set of files
+
+        :param files: tuple     - collection of files in the filesystem to unlock
+        """
         for given_file in files:
             abspath = os.path.abspath(os.path.realpath(given_file))
 
@@ -122,6 +151,10 @@ class KgbSorta(object):
                 node.share.store.ensure_unlink(node.rel_path, node)
 
     def cleanup(self, share_path):
+        """Cleanup a given share
+
+        :param share_path: str  - absolute path of share
+        """
         share = self.get_share(share_path)
         store = share.store
 
