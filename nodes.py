@@ -2,8 +2,6 @@ import os
 import logging
 import arrow
 
-logger = logging.getLogger('FileSystem')
-
 
 def traverse_path(path):
     for i, elem in enumerate(path.split(os.path.sep)):
@@ -15,7 +13,6 @@ class Share(object):
         self.path = path
         if not os.path.exists(self.path) and os.path.isdir(self.path):
             msg = "Directory not found: {}".format(self.path)
-            logger.critical(msg)
             raise IOError(msg)
 
     def __repr__(self):
@@ -187,16 +184,13 @@ class ChildNode(object):
 
     def mkdir(self):
         os.mkdir(self.abspath)
-        logger.info("Created directory:", self.abspath)
 
     def rmdir(self, force=False):
         if force is False:
             os.rmdir(self.abspath)
-            logger.info("Deleted directory:", self.abspath)
         elif force is True:
             import shutil
             shutil.rmtree(self.abspath)
-            logger.info("Recursively deleted:", self.abspath)
 
     def link_to(self, src):
         os.link(src.abspath, self.abspath)

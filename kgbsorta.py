@@ -141,18 +141,20 @@ class KgbSorta(object):
 
 
 if __name__ == '__main__':
-    args = docopt(__doc__, version=__version__)
-    sorta = KgbSorta()
-    if args['lock']:
-        sorta.lock(*args['FILE'])
-    elif args['unlock']:
-        sorta.unlock(*args['FILE'])
+    try:
+        args = docopt(__doc__, version=__version__)
+        sorta = KgbSorta()
+        if args['lock']:
+            sorta.lock(*args['FILE'])
+        elif args['unlock']:
+            sorta.unlock(*args['FILE'])
 
-    elif args['cleanup']:
-        sorta.cleanup(args['SHARE'])
+        elif args['cleanup']:
+            sorta.cleanup(args['SHARE'])
 
-    else:
-        print "Available shares:"
-        for share in sorta.shares:
-            print share
+        else:
+            print __doc__
+            raise SystemExit(0)
+    except Exception as e:
+        print e.message
 
