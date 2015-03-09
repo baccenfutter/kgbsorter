@@ -22,7 +22,7 @@ ensure that all these file-names exist as a hardlink relative to the
 share's base-directory. Second, it will recursively iterate over all
 files underneath the share base-directory and delete all files that
 are not locked and older than N days, whereby N may be configured via
-the shell parameters -d DAYS and -m MINUTES or default to 7 days.
+the shell parameters -d DAYS which defaults to seven(7).
 
 Usage:
     kgbsorter
