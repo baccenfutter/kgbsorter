@@ -273,5 +273,5 @@ class ChildNode(object):
 
         :param days: int    - number of days
         """
-        time_delta = arrow.now() - arrow.get(os.path.getctime(self.abspath))
+        time_delta = arrow.now() - arrow.get(os.path.getmtime(self.abspath))
         return time_delta.days > days
