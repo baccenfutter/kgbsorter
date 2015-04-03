@@ -37,11 +37,13 @@ __author = ['Brian Wiborg <baccenfutter@c-base.org>']
 __version__ = '0.1.0-alpha'
 __date__ = '2015-03-08'
 
-from docopt import docopt
 from ConfigParser import SafeConfigParser
+
+from docopt import docopt
 import os
 
-from nodes import Share, ChildNode
+from kgbsorta.nodes import Share, ChildNode
+
 
 DEFAULT_DAYS = 7
 
