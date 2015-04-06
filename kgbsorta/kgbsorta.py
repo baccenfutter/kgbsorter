@@ -37,6 +37,9 @@ __author = ['Brian Wiborg <baccenfutter@c-base.org>']
 __version__ = '0.1.0-alpha'
 __date__ = '2015-03-08'
 
+import sys
+sys.path.append("/usr/local/src/kgbsorta")
+
 from ConfigParser import SafeConfigParser
 
 from docopt import docopt
@@ -160,6 +163,10 @@ class KgbSorta(object):
         share = self.get_share(share_path)
         store = share.store
 
+        to_be_deleted = os.path.join(share.path, 'to_be_deleted_soon.txt')
+        tbd_file = open(to_be_deleted, 'w')
+        tbd_file.write('all files listed here will be deleted within the next 24h!\n')
+
         # iterate over all file-nodes in store and ensure hardlinks
         # in share for each of them.
         for node in store.subs:
@@ -173,6 +180,10 @@ class KgbSorta(object):
                 continue
             if node.older_than(days):
                 node.remove()
+            if node.older_than(days - 1):
+                tbd_file.write(node.relpath + '\n')
+
+        tbd_file.close()
 
 
 if __name__ == '__main__':
