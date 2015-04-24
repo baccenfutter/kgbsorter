@@ -266,6 +266,7 @@ class ChildNode(object):
 
     def remove(self):
         """Perform rm on self"""
+        print "Removing: {}".format(self.abspath)
         os.remove(self.abspath)
 
     def older_than(self, days):
@@ -274,4 +275,5 @@ class ChildNode(object):
         :param days: int    - number of days
         """
         time_delta = arrow.now() - arrow.get(os.path.getmtime(self.abspath))
-        return time_delta.days > days
+        return bool(time_delta.days > days)
+

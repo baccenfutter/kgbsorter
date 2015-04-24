@@ -37,18 +37,17 @@ __author = ['Brian Wiborg <baccenfutter@c-base.org>']
 __version__ = '0.1.0-alpha'
 __date__ = '2015-03-08'
 
-import sys
-sys.path.append("/usr/local/src/kgbsorta")
-
+from kgbsorter.nodes import Share, ChildNode
 from ConfigParser import SafeConfigParser
+from commands import getstatusoutput
 
 from docopt import docopt
 import os
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
-from kgbsorta.nodes import Share, ChildNode
-
-
-DEFAULT_DAYS = 7
+DEFAULT_DAYS = 14
 
 
 class KgbSorta(object):
@@ -177,11 +176,23 @@ class KgbSorta(object):
         # timeout.
         for node in share.subs:
             if node.share.store.check_link(node.rel_path, node):
+                print "CONTINUE"
                 continue
-            if node.older_than(days):
-                node.remove()
-            if node.older_than(days - 1):
-                tbd_file.write(node.relpath + '\n')
+            try:
+                os.stat(str(node))
+                node.older_than(days)
+                if node.older_than(days):
+                    node.remove()
+                elif node.older_than(days - 1):
+                    tbd_file.write(node.rel_path + '\n')
+            except OSError, e:
+                if e.errno == os.errno.ENOENT:
+                    print "Broken symlink: {}".format(node)
+                    node.remove()
+
+        # iterate over all remaining file-nodes and delete all emtpy
+        # filders.
+        status, output = getstatusoutput("find '{}' -type d -empty -delete".format(share.path))
 
         tbd_file.close()
 
